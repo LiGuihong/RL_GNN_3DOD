@@ -37,6 +37,10 @@ pip3 install --user shapely
 
 We use the KITTI 3D Object Detection dataset. Please download the dataset from the KITTI website and also download the 3DOP train/val split [here](https://xiaozhichen.github.io/files/mv3d/imagesets.tar.gz). We provide extra split files for seperated classes in [splits/](splits). We recommand the following file structure:
 
+```
+ssh to lambdax.ece.utexas.edu
+DATASET_ROOT_DIR: /mnt/17b83cc4-8721-4108-b173-4fa1677ba5df/dataset/kitti 
+```
     DATASET_ROOT_DIR
     ├── image                    #  Left color images
     │   ├── training
@@ -64,19 +68,12 @@ We use the KITTI 3D Object Detection dataset. Please download the dataset from t
 ### Download Point-GNN
 
 Clone the repository recursively:
-```
-git clone https://github.com/Shudeng/Point-GNN.pytorch --recursive
-```
 
 ### Training
 ```
 bash train.sh
 ```
 
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
 
 
 
