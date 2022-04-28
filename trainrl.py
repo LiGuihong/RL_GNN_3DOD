@@ -45,6 +45,10 @@ if __name__ == "__main__":
     parser.add_argument('--resume', type=int,
                         default=0,
                        help='resume from a previous checkpoint or not')
+    parser.add_argument('--test_epoch', type=int,
+                        default=None,
+                       help='the frequency for test')
+
     args = parser.parse_args()
     epoches = args.epoches
     batch_size = args.batch_size
@@ -177,59 +181,60 @@ if __name__ == "__main__":
 
         #######################################################
         ######################## Validate #####################
-        recalls_list, precisions_list, mAP_list = {}, {}, {}
-        for i in range(NUM_CLASSES): recalls_list[i], precisions_list[i], mAP_list[i] = [], [], []
-        frame_idx_list = np.random.permutation(NUM_VAL_SAMPLE)
-        pbar = tqdm(list(range(0, NUM_VAL_SAMPLE-batch_size+1, batch_size)), desc="start TEST", leave=True)
-        model.eval()
-        for batch_idx in pbar:
-            #for batch_idx in range(0, NUM_TEST_SAMPLE-batch_size+1, batch_size):
-            batch_frame_idx_list = frame_idx_list[batch_idx: batch_idx+batch_size]
-            batch = val_data_provider.provide_batch(batch_frame_idx_list)
-            input_v, vertex_coord_list, keypoint_indices_list, edges_list, \
-                    cls_labels, encoded_boxes, valid_boxes = batch
+        if epoch%args.test_epoch==0 or epoch == epoches-1:
+            recalls_list, precisions_list, mAP_list = {}, {}, {}
+            for i in range(NUM_CLASSES): recalls_list[i], precisions_list[i], mAP_list[i] = [], [], []
+            frame_idx_list = np.random.permutation(NUM_VAL_SAMPLE)
+            pbar = tqdm(list(range(0, NUM_VAL_SAMPLE-batch_size+1, batch_size)), desc="start TEST", leave=True)
+            model.eval()
+            for batch_idx in pbar:
+                #for batch_idx in range(0, NUM_TEST_SAMPLE-batch_size+1, batch_size):
+                batch_frame_idx_list = frame_idx_list[batch_idx: batch_idx+batch_size]
+                batch = val_data_provider.provide_batch(batch_frame_idx_list)
+                input_v, vertex_coord_list, keypoint_indices_list, edges_list, \
+                        cls_labels, encoded_boxes, valid_boxes = batch
 
-            new_batch = []
-            for item in batch:
-                if not isinstance(item, torch.Tensor):
-                    item = [x.to(device) for x in item]
-                else: item = item.to(device)
-                new_batch += [item]
-            batch = new_batch
-            input_v, vertex_coord_list, keypoint_indices_list, edges_list, \
-                    cls_labels, encoded_boxes, valid_boxes = batch
+                new_batch = []
+                for item in batch:
+                    if not isinstance(item, torch.Tensor):
+                        item = [x.to(device) for x in item]
+                    else: item = item.to(device)
+                    new_batch += [item]
+                batch = new_batch
+                input_v, vertex_coord_list, keypoint_indices_list, edges_list, \
+                        cls_labels, encoded_boxes, valid_boxes = batch
 
-            logits, box_encoding = model(batch, is_training=False)
-            predictions = torch.argmax(logits, dim=1)
+                logits, box_encoding = model(batch, is_training=False)
+                predictions = torch.argmax(logits, dim=1)
 
-            loss_dict = model.loss(logits, cls_labels, box_encoding, encoded_boxes, valid_boxes)
-            t_cls_loss, t_loc_loss, t_reg_loss = loss_dict['cls_loss'], loss_dict['loc_loss'], loss_dict['reg_loss']
-            pbar.set_description(f"{epoch}, t_cls_loss: {t_cls_loss}, t_loc_loss: {t_loc_loss}, t_reg_loss: {t_reg_loss}")
-            t_total_loss = t_cls_loss + t_loc_loss + t_reg_loss
+                loss_dict = model.loss(logits, cls_labels, box_encoding, encoded_boxes, valid_boxes)
+                t_cls_loss, t_loc_loss, t_reg_loss = loss_dict['cls_loss'], loss_dict['loc_loss'], loss_dict['reg_loss']
+                pbar.set_description(f"{epoch}, t_cls_loss: {t_cls_loss}, t_loc_loss: {t_loc_loss}, t_reg_loss: {t_reg_loss}")
+                t_total_loss = t_cls_loss + t_loc_loss + t_reg_loss
 
-            # record metrics
-            recalls, precisions = recall_precisions(cls_labels, predictions, NUM_CLASSES)
-            #mAPs = mAP(cls_labels, logits, NUM_CLASSES)
-            mAPs = mAP(cls_labels, logits.sigmoid(), NUM_CLASSES)
-            for i in range(NUM_CLASSES):
-                recalls_list[i] += [recalls[i]]
-                precisions_list[i] += [precisions[i]]
-                mAP_list[i] += [mAPs[i]]
-            # print( epoch, batch_idx)
+                # record metrics
+                recalls, precisions = recall_precisions(cls_labels, predictions, NUM_CLASSES)
+                #mAPs = mAP(cls_labels, logits, NUM_CLASSES)
+                mAPs = mAP(cls_labels, logits.sigmoid(), NUM_CLASSES)
+                for i in range(NUM_CLASSES):
+                    recalls_list[i] += [recalls[i]]
+                    precisions_list[i] += [precisions[i]]
+                    mAP_list[i] += [mAPs[i]]
+                # print( epoch, batch_idx)
 
-        # print test metrics
-        for class_idx in range(NUM_CLASSES):
-            print(f"class_idx:{class_idx}, recall: {np.mean(recalls_list[class_idx])}, precision: {np.mean(precisions_list[class_idx])}, mAP: {np.mean(mAP_list[class_idx])}")
+            # print test metrics
+            for class_idx in range(NUM_CLASSES):
+                print(f"class_idx:{class_idx}, recall: {np.mean(recalls_list[class_idx])}, precision: {np.mean(precisions_list[class_idx])}, mAP: {np.mean(mAP_list[class_idx])}")
 
-            writer.add_scalar('class_idx_{}: recall'.format(class_idx), np.mean(recalls_list[class_idx]), epoch)
-            writer.add_scalar('class_idx_{}: precision'.format(class_idx), np.mean(precisions_list[class_idx]), epoch)
-            writer.add_scalar('class_idx_{}: mAP'.format(class_idx), np.mean(mAP_list[class_idx]), epoch)
-            print(epoch, 'class_idx_{}: recall'.format(class_idx), np.mean(recalls_list[class_idx]), \
-                    file = open("saved_models/kp{}_vote{}/val_perf.log".format(args.k_val, args.vote_idx), 'a+'))
-            print(epoch, 'class_idx_{}: precision'.format(class_idx), np.mean(precisions_list[class_idx]), \
-                    file = open("saved_models/kp{}_vote{}/val_perf.log".format(args.k_val, args.vote_idx), 'a+'))
-            print(epoch, 'class_idx_{}: mAP'.format(class_idx), np.mean(mAP_list[class_idx]), \
-                    file = open("saved_models/kp{}_vote{}/val_perf.log".format(args.k_val, args.vote_idx), 'a+'))
+                writer.add_scalar('class_idx_{}: recall'.format(class_idx), np.mean(recalls_list[class_idx]), epoch)
+                writer.add_scalar('class_idx_{}: precision'.format(class_idx), np.mean(precisions_list[class_idx]), epoch)
+                writer.add_scalar('class_idx_{}: mAP'.format(class_idx), np.mean(mAP_list[class_idx]), epoch)
+                print(epoch, 'class_idx_{}: recall'.format(class_idx), np.mean(recalls_list[class_idx]), \
+                        file = open("saved_models/kp{}_vote{}/val_perf.log".format(args.k_val, args.vote_idx), 'a+'))
+                print(epoch, 'class_idx_{}: precision'.format(class_idx), np.mean(precisions_list[class_idx]), \
+                        file = open("saved_models/kp{}_vote{}/val_perf.log".format(args.k_val, args.vote_idx), 'a+'))
+                print(epoch, 'class_idx_{}: mAP'.format(class_idx), np.mean(mAP_list[class_idx]), \
+                        file = open("saved_models/kp{}_vote{}/val_perf.log".format(args.k_val, args.vote_idx), 'a+'))
         # save model
         torch.save(model.state_dict(), "saved_models/kp{}_vote{}/model_{}.pt".format(args.k_val, args.vote_idx, epoch))
 
