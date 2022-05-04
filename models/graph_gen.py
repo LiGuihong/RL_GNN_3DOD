@@ -6,7 +6,7 @@ import random
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
 import open3d
-import tensorflow as tf
+# import tensorflow as tf
 
 def multi_layer_downsampling(points_xyz, base_voxel_size, levels=[1],
     add_rnd3d=False,):

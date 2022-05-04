@@ -168,9 +168,9 @@ if __name__ == "__main__":
         for class_idx in range(NUM_CLASSES):
             print(f"class_idx:{class_idx}, recall: {np.mean(recalls_list[class_idx])}, precision: {np.mean(precisions_list[class_idx])}, mAP: {np.mean(mAP_list[class_idx])}")
 
-            writer.add_scalar('class_idx_{}: recall'.format(class_idx), np.mean(recalls_list[class_idx]), epoch)
-            writer.add_scalar('class_idx_{}: precision'.format(class_idx), np.mean(precisions_list[class_idx]), epoch)
-            writer.add_scalar('class_idx_{}: mAP'.format(class_idx), np.mean(mAP_list[class_idx]), epoch)
+            writer.add_scalar('train/class_idx_{}: recall'.format(class_idx), np.mean(recalls_list[class_idx]), epoch)
+            writer.add_scalar('train/class_idx_{}: precision'.format(class_idx), np.mean(precisions_list[class_idx]), epoch)
+            writer.add_scalar('train/class_idx_{}: mAP'.format(class_idx), np.mean(mAP_list[class_idx]), epoch)
             print(epoch, 'class_idx_{}: recall'.format(class_idx), np.mean(recalls_list[class_idx]), \
                     file = open("saved_models/kp{}_vote{}/train_perf.log".format(args.k_val, args.vote_idx), 'a+'))
             print(epoch, 'class_idx_{}: precision'.format(class_idx), np.mean(precisions_list[class_idx]), \
@@ -226,9 +226,9 @@ if __name__ == "__main__":
             for class_idx in range(NUM_CLASSES):
                 print(f"class_idx:{class_idx}, recall: {np.mean(recalls_list[class_idx])}, precision: {np.mean(precisions_list[class_idx])}, mAP: {np.mean(mAP_list[class_idx])}")
 
-                writer.add_scalar('class_idx_{}: recall'.format(class_idx), np.mean(recalls_list[class_idx]), epoch)
-                writer.add_scalar('class_idx_{}: precision'.format(class_idx), np.mean(precisions_list[class_idx]), epoch)
-                writer.add_scalar('class_idx_{}: mAP'.format(class_idx), np.mean(mAP_list[class_idx]), epoch)
+                writer.add_scalar('test/class_idx_{}: recall'.format(class_idx), np.mean(recalls_list[class_idx]), epoch)
+                writer.add_scalar('test/class_idx_{}: precision'.format(class_idx), np.mean(precisions_list[class_idx]), epoch)
+                writer.add_scalar('test/class_idx_{}: mAP'.format(class_idx), np.mean(mAP_list[class_idx]), epoch)
                 print(epoch, 'class_idx_{}: recall'.format(class_idx), np.mean(recalls_list[class_idx]), \
                         file = open("saved_models/kp{}_vote{}/val_perf.log".format(args.k_val, args.vote_idx), 'a+'))
                 print(epoch, 'class_idx_{}: precision'.format(class_idx), np.mean(precisions_list[class_idx]), \
