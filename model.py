@@ -285,30 +285,47 @@ class MultiLayerFastLocalGraphModelV2(nn.Module):
         self.point_set_pooling = PointSetPooling()
 
         self.graph_nets = nn.ModuleList()
-        
+        self.previous_layer = [self.point_set_pooling]
+        self.latter_layer = []
         for i in range(graph_net_layers):
             if i==vote_idx:
                 k_val=300
             else:
                 k_val=-1
+
             self.graph_nets.append(GraphNetAutoCenter(k_val = k_val),)
+            if i<vote_idx:
+                self.previous_layer.append(self.graph_nets[i])
+            elif i>vote_idx:
+                self.latter_layer.append(self.graph_nets[i])
 
         self.predictor = ClassAwarePredictor(num_classes, box_encoding_len)
+        self.latter_layer.append(self.predictor)
 
-
-    def forward(self, batch, is_training):
+    def forward(self, batch, is_training, get_statistic=False, trainrl=False):
         input_v, vertex_coord_list, keypoint_indices_list, edges_list, \
             cls_labels, encoded_boxes, valid_boxes = batch
+        if trainrl:
+            point_features, point_coordinates, keypoint_indices, set_indices = input_v, vertex_coord_list[0], keypoint_indices_list[0], edges_list[0]
+            point_features = self.point_set_pooling(point_features, point_coordinates, keypoint_indices, set_indices)
 
-        point_features, point_coordinates, keypoint_indices, set_indices = input_v, vertex_coord_list[0], keypoint_indices_list[0], edges_list[0]
-        point_features = self.point_set_pooling(point_features, point_coordinates, keypoint_indices, set_indices)
+            point_coordinates, keypoint_indices, set_indices = vertex_coord_list[1], keypoint_indices_list[1], edges_list[1]
+            for i, graph_net in enumerate(self.graph_nets):
+                point_features = graph_net(point_features, point_coordinates, keypoint_indices, set_indices)
+            logits, box_encodings = self.predictor(point_features)
+            return logits, box_encodings
+        else:
+            point_features, point_coordinates, keypoint_indices, set_indices = input_v, vertex_coord_list[0], keypoint_indices_list[0], edges_list[0]
+            point_features = self.point_set_pooling(point_features, point_coordinates, keypoint_indices, set_indices)
+            if get_statistic:
+                return point_features.size()[0]
+                print(point_features.size())
 
-
-        point_coordinates, keypoint_indices, set_indices = vertex_coord_list[1], keypoint_indices_list[1], edges_list[1]
-        for i, graph_net in enumerate(self.graph_nets):
-            point_features = graph_net(point_features, point_coordinates, keypoint_indices, set_indices)
-        logits, box_encodings = self.predictor(point_features)
-        return logits, box_encodings
+            point_coordinates, keypoint_indices, set_indices = vertex_coord_list[1], keypoint_indices_list[1], edges_list[1]
+            for i, graph_net in enumerate(self.graph_nets):
+                point_features = graph_net(point_features, point_coordinates, keypoint_indices, set_indices)
+            logits, box_encodings = self.predictor(point_features)
+            return logits, box_encodings
 
     def postprocess(self, logits):
         softmax = nn.Softmax(dim=1)

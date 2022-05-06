@@ -14,6 +14,73 @@ from tqdm import tqdm
 import glob
 from torch.utils.tensorboard import SummaryWriter
 
+import torch
+from torch.nn.modules.utils import _pair
+from torch.nn import functional as F
+from torch.autograd import Function
+from torch import nn
+from torch.autograd import Function, Variable
+
+
+
+class RL_pass_reject(Function):
+    	@staticmethod
+	def forward(ctx, x, alpha):
+		ctx.save_for_backward(x, alpha.item())
+        y = torch.where(x>alpha.item(), 1.0,0.0)
+		return y
+
+	@staticmethod
+	def backward(ctx, dLdy_q):
+		# Backward function, I borrowed code from
+		# https://github.com/obilaniu/GradOverride/blob/master/functional.py
+		# We get dL / dy_q as a gradient
+		x, alpha, = ctx.saved_tensors
+		# Weight gradient is only valid when [0, alpha]
+		# Actual gradient for alpha,
+		# By applying Chain Rule, we get dL / dy_q * dy_q / dy * dy / dalpha
+		# dL / dy_q = argument,  dy_q / dy * dy / dalpha = 0, 1 with x value range 
+		# x_range       = 1.0-lower_bound-upper_bound
+		x_range = ~(lower_bound|upper_bound)
+		grad_alpha = torch.sum(dLdy_q * torch.le(x, alpha).float()).view(-1)
+		return dLdy_q, grad_alpha
+
+class RLagnet(nn.Module):
+    def __init__(self, in_chs, se_ratio=0.25, act_layer=nn.ReLU,
+                 attn_act_fn=torch.sigmoid, divisor=1, channel_gate_num=None, k_val=None):
+        super(MultiHeadGate, self).__init__()
+        self.attn_act_fn = attn_act_fn
+        self.channel_gate_num = channel_gate_num
+        reduced_chs = int(in_chs * se_ratio)
+        # self.avg_pool = nn.AdaptiveAvgPool1d(1)
+        self.conv_reduce = nn.Linear(in_chs, reduced_chs, bias=True)
+        self.act1 = act_layer(inplace=True)
+        self.conv_expand = nn.Linear(reduced_chs, 1, bias=True)
+        self.in_chs = in_chs
+        self.has_gate = False
+        self.k_val = k_val
+        self.threshold = nn.Parameter(torch.tensor(0.5),required_grad = True)
+        if self.attn_act_fn == 'tanh':
+            nn.init.zeros_(self.conv_expand.weight)
+            nn.init.zeros_(self.conv_expand.bias)
+
+    def forward(self, x):
+        # x_pool = self.avg_pool(x)
+        x_reduced = self.conv_reduce(x)
+        x_reduced = self.act1(x_reduced)
+        attn = self.conv_expand(x_reduced)
+        if self.attn_act_fn == 'tanh':
+            attn = (1 + attn.tanh())
+        else:
+            attn = self.attn_act_fn(attn)
+        # x = x * attn
+        attn = RL_pass_reject.apply(attn, self.threshold)
+        # keep_gate, print_gate, print_idx = gumbel_softmax(torch.squeeze(attn), dim=0, k_val=min(self.k_val, x.size()[0]), training=self.training)
+        print_gate = torch.unsqueeze(attn, 1)
+        print_gate = print_gate.repeat(1, self.in_chs)
+        return x*print_gate
+
+
 
 
 
