@@ -294,14 +294,42 @@ class MultiLayerFastLocalGraphModelV2(nn.Module):
                 k_val=-1
 
             self.graph_nets.append(GraphNetAutoCenter(k_val = k_val),)
-            if i<vote_idx:
+            if i<=vote_idx:
                 self.previous_layer.append(self.graph_nets[i])
             elif i>vote_idx:
                 self.latter_layer.append(self.graph_nets[i])
 
         self.predictor = ClassAwarePredictor(num_classes, box_encoding_len)
         self.latter_layer.append(self.predictor)
+        self.vote_idx=vote_idx
+        
+    def call_previouselayer(self, batch, is_training):
+        input_v, vertex_coord_list, keypoint_indices_list, edges_list, \
+        cls_labels, encoded_boxes, valid_boxes = batch
+        point_features, point_coordinates, keypoint_indices, set_indices = input_v, vertex_coord_list[0], keypoint_indices_list[0], edges_list[0]
+        point_features = self.point_set_pooling(point_features, point_coordinates, keypoint_indices, set_indices)
 
+        point_coordinates, keypoint_indices, set_indices = vertex_coord_list[1], keypoint_indices_list[1], edges_list[1]
+        for i, graph_net in enumerate(self.graph_nets):
+            if i<=self.vote_idx:
+                point_features = graph_net(point_features, point_coordinates, keypoint_indices, set_indices)        
+            else:
+                return point_features
+            
+    def call_latter_layer(self, batch, point_features, is_training):
+        input_v, vertex_coord_list, keypoint_indices_list, edges_list, \
+        cls_labels, encoded_boxes, valid_boxes = batch
+        point_features, point_coordinates, keypoint_indices, set_indices = input_v, vertex_coord_list[0], keypoint_indices_list[0], edges_list[0]
+        point_features = self.point_set_pooling(point_features, point_coordinates, keypoint_indices, set_indices)
+
+        point_coordinates, keypoint_indices, set_indices = vertex_coord_list[1], keypoint_indices_list[1], edges_list[1]
+        for i, graph_net in enumerate(self.graph_nets):
+            if i>self.vote_idx:
+                point_features = graph_net(point_features, point_coordinates, keypoint_indices, set_indices)        
+        logits, box_encodings = self.predictor(point_features)
+        return logits, box_encodings
+        
+        
     def forward(self, batch, is_training, get_statistic=False, trainrl=False):
         input_v, vertex_coord_list, keypoint_indices_list, edges_list, \
             cls_labels, encoded_boxes, valid_boxes = batch

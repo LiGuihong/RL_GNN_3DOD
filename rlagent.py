@@ -41,12 +41,13 @@ class RL_pass_reject(Function):
         # By applying Chain Rule, we get dL / dy_q * dy_q / dy * dy / dalpha
         # dL / dy_q = argument,  dy_q / dy * dy / dalpha = 0, 1 with x value range 
         # x_range       = 1.0-lower_bound-upper_bound
-        x_range = ~(lower_bound|upper_bound)
         grad_alpha = torch.sum(dLdy_q * torch.le(x, alpha).float()).view(-1)
         return dLdy_q, grad_alpha
 
+
+
 class RLagnet(nn.Module):
-    def __init__(self, in_chs, se_ratio=0.25, act_layer=nn.ReLU,
+    def __init__(self, in_chs, se_ratio=0.25, act_layer=nn.ReLU,num_actions=2,
                  attn_act_fn=torch.sigmoid, divisor=1, channel_gate_num=None, k_val=None):
         super(MultiHeadGate, self).__init__()
         self.attn_act_fn = attn_act_fn
@@ -55,33 +56,72 @@ class RLagnet(nn.Module):
         # self.avg_pool = nn.AdaptiveAvgPool1d(1)
         self.conv_reduce = nn.Linear(in_chs, reduced_chs, bias=True)
         self.act1 = act_layer(inplace=True)
-        self.conv_expand = nn.Linear(reduced_chs, 1, bias=True)
+        self.conv_expand = nn.Linear(reduced_chs, 2, bias=True)
         self.in_chs = in_chs
         self.has_gate = False
         self.k_val = k_val
-        self.threshold = nn.Parameter(torch.tensor(0.5),required_grad = True)
+        self.threshold = nn.Parameter(torch.tensor(0.2),required_grad = False)
         if self.attn_act_fn == 'tanh':
             nn.init.zeros_(self.conv_expand.weight)
             nn.init.zeros_(self.conv_expand.bias)
+        self.num_actions = 2
+        self.soft = nn.Softmax(dim=1)
+
+        self.opt = torch.optim.Adam(self.net.parameters(), betas=[0.9, 0.999],lr=alpha)
 
     def forward(self, x):
         # x_pool = self.avg_pool(x)
         x_reduced = self.conv_reduce(x)
         x_reduced = self.act1(x_reduced)
         attn = self.conv_expand(x_reduced)
-        if self.attn_act_fn == 'tanh':
-            attn = (1 + attn.tanh())
-        else:
-            attn = self.attn_act_fn(attn)
-        # x = x * attn
-        attn = RL_pass_reject.apply(attn, self.threshold)
-        # keep_gate, print_gate, print_idx = gumbel_softmax(torch.squeeze(attn), dim=0, k_val=min(self.k_val, x.size()[0]), training=self.training)
-        print_gate = torch.unsqueeze(attn, 1)
-        print_gate = print_gate.repeat(1, self.in_chs)
-        return x*print_gate
+        # if self.attn_act_fn == 'tanh':
+        #     attn = (1 + attn.tanh())
+        # else:
+        #     attn = self.attn_act_fn(attn)
+        attn = self.soft(attn)
+        action = []
+        for id, i in enumerate(attn):
+            action.append(np.random.choice(self.num_actions, p=np.squeeze(attn[id].detach().numpy())))
+        return torch.tensor(action).to(x.device)
 
+    def call(self, x):
+        # x_pool = self.avg_pool(x)
+        x_reduced = self.conv_reduce(x)
+        x_reduced = self.act1(x_reduced)
+        attn = self.conv_expand(x_reduced)
+        # if self.attn_act_fn == 'tanh':
+        #     attn = (1 + attn.tanh())
+        # else:
+        #     attn = self.attn_act_fn(attn)
+        attn = self.soft(attn)
+        action = []
+        for id, i in enumerate(attn):
+            action.append(np.random.choice(self.num_actions, p=np.squeeze(attn[id].detach().numpy())))
+        return torch.tensor(action).to(x.device)
 
+    def update(self, s, a, delta, gamma_t=1.0):
+        """
+        s: state S_t
+        a: action A_t
+        gamma_t: gamma^t
+        delta: G-v(S_t,w)
+        """
+        # TODO: implement this method
 
+        self.train()
+        y = self.forward(torch.tensor(s, dtype=torch.float32))
+        # action = np.random.choice(self.num_actions, p=np.squeeze(y.detach().numpy()))
+        masks = torch.zeros(s.size()[0],self.num_actions).to(s.device)
+        for actid, actt in enumerate(a):
+            masks[actid, actt] = 1.0
+        
+        log_prob = torch.log(y.squeeze(0))        
+        loss = -torch.sum(masks*log_prob)*gamma_t*delta
+        # loss = torch.sum(masks*torch.log(y))*gamma_t*delta
+        # loss =self.loss_func(y,torch.tensor(G, dtype=torch.float32))
+        self.opt.zero_grad()
+        loss.backward()
+        self.opt.step()
 
 
 if __name__ == "__main__":
@@ -115,6 +155,8 @@ if __name__ == "__main__":
     parser.add_argument('--test_epoch', type=int,
                         default=None,
                        help='the frequency for test')
+    parser.add_argument('--repeat_time', default=100,type=int,
+                       help='the frequency for test')
 
     args = parser.parse_args()
     epoches = args.epoches
@@ -133,7 +175,7 @@ if __name__ == "__main__":
             './3DOP_splits/'+train_config['train_dataset'])
     else:
         DATASET_SPLIT_FILE = args.dataset_split_file
-    writer = SummaryWriter(log_dir='logs/kp{}_vote{}'.format(args.k_val, args.vote_idx), comment='key points:{}  vote_layer_index:{}'.format(args.k_val, args.vote_idx))
+    writer = SummaryWriter(log_dir='logs/rl_kp{}_vote{}'.format(args.k_val, args.vote_idx), comment='key points:{}  vote_layer_index:{}'.format(args.k_val, args.vote_idx))
     
     # input function ==============================================================
     train_config['NUM_TEST_SAMPLE']=-1
@@ -169,7 +211,6 @@ if __name__ == "__main__":
     model = MultiLayerFastLocalGraphModelV2(num_classes=NUM_CLASSES,
                 box_encoding_len=BOX_ENCODING_LEN, mode='train',
                 **config['model_kwargs'])
-    model = model.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     NUM_TRAIN_SAMPLE = train_dataset.num_files
@@ -185,8 +226,11 @@ if __name__ == "__main__":
         last_epoch = np.max(epoch_idx)
         model.load_state_dict(torch.load("saved_models/kp{}_vote{}/model_{}.pt".format(args.k_val, args.vote_idx, last_epoch)))
         model.eval()
-
-    for epoch in range(last_epoch, epoches):
+    rlagent = RLagnet(300)
+    rlagent = rlagent.to(device) 
+    model = model.to(device)        
+    # model.graph_nets[args.vote_idx].k_val=-1
+    for epoch in range(10):
         
         #######################################################
         ######################## Training #####################
@@ -211,25 +255,29 @@ if __name__ == "__main__":
             batch = new_batch
             input_v, vertex_coord_list, keypoint_indices_list, edges_list, \
                     cls_labels, encoded_boxes, valid_boxes = batch
-
-            logits, box_encoding = model(batch, is_training=True)
-            predictions = torch.argmax(logits, dim=1)
-
-            loss_dict = model.loss(logits, cls_labels, box_encoding, encoded_boxes, valid_boxes)
-            t_cls_loss, t_loc_loss, t_reg_loss = loss_dict['cls_loss'], loss_dict['loc_loss'], loss_dict['reg_loss']
-            pbar.set_description(f"{epoch}, t_cls_loss: {t_cls_loss}, t_loc_loss: {t_loc_loss}, t_reg_loss: {t_reg_loss}")
-            t_total_loss = t_cls_loss + t_loc_loss + t_reg_loss
-            optimizer.zero_grad()
-            t_total_loss.backward()
-            optimizer.step()
-            # record metrics
-            recalls, precisions = recall_precisions(cls_labels, predictions, NUM_CLASSES)
-            #mAPs = mAP(cls_labels, logits, NUM_CLASSES)
-            mAPs = mAP(cls_labels, logits.sigmoid(), NUM_CLASSES)
-            for i in range(NUM_CLASSES):
-                recalls_list[i] += [recalls[i]]
-                precisions_list[i] += [precisions[i]]
-                mAP_list[i] += [mAPs[i]]
+            for jjjjjj in range(args.repeat_time):
+                with torch.no_grad():
+                    oldpointfeat = model.call_previouselayer(batch, is_training=False)
+                masks = rlagent.call(oldpointfeat)
+                print_gate = torch.unsqueeze(masks, 1)
+                print_gate = print_gate.repeat(1, 300)
+                pointfeat = pointfeat*print_gate
+                with torch.no_grad():
+                    logits, box_encoding  = model.call_latter_layer(batch, oldpointfeat, is_training=False)
+                    predictions = torch.argmax(logits, dim=1)
+                    loss_dict = model.loss(logits, cls_labels, box_encoding, encoded_boxes, valid_boxes)
+                    t_cls_loss, t_loc_loss, t_reg_loss = loss_dict['cls_loss'], loss_dict['loc_loss'], loss_dict['reg_loss']
+                    pbar.set_description(f"{epoch}, t_cls_loss: {t_cls_loss}, t_loc_loss: {t_loc_loss}, t_reg_loss: {t_reg_loss}")
+                t_total_loss = t_cls_loss + t_loc_loss + t_reg_loss
+                rlagent.update(oldpointfeat, masks, -t_total_loss, 0.9)
+                # record metrics
+                recalls, precisions = recall_precisions(cls_labels, predictions, NUM_CLASSES)
+                #mAPs = mAP(cls_labels, logits, NUM_CLASSES)
+                mAPs = mAP(cls_labels, logits.sigmoid(), NUM_CLASSES)
+                for i in range(NUM_CLASSES):
+                    recalls_list[i] += [recalls[i]]
+                    precisions_list[i] += [precisions[i]]
+                    mAP_list[i] += [mAPs[i]]
             # print( epoch, batch_idx)
         # print training metrics
         for class_idx in range(NUM_CLASSES):
@@ -303,7 +351,7 @@ if __name__ == "__main__":
                 print(epoch, 'class_idx_{}: mAP'.format(class_idx), np.mean(mAP_list[class_idx]), \
                         file = open("saved_models/kp{}_vote{}/val_perf.log".format(args.k_val, args.vote_idx), 'a+'))
         # save model
-        torch.save(model.state_dict(), "saved_models/kp{}_vote{}/model_{}.pt".format(args.k_val, args.vote_idx, epoch))
+        torch.save(model.state_dict(), "saved_models/rl_kp{}_vote{}/model_{}.pt".format(args.k_val, args.vote_idx, epoch))
 
 
 
