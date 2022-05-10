@@ -1,22 +1,3 @@
-# Point-GNN
-
-This repository is the pytorch-version reimplementation of  [Point-GNN: Graph Neural Network for 3D Object Detection in a Point Cloud](http://openaccess.thecvf.com/content_CVPR_2020/papers/Shi_Point-GNN_Graph_Neural_Network_for_3D_Object_Detection_in_a_CVPR_2020_paper.pdf), CVPR 2020. 
-It is based on original CVPR paper and their [tensorflow-version codes](https://github.com/WeijingShi/Point-GNN/)
-
-Thanks owe to authors. If you find this code useful in your research, please consider citing their work:
-```
-@InProceedings{Point-GNN,
-author = {Shi, Weijing and Rajkumar, Ragunathan (Raj)},
-title = {Point-GNN: Graph Neural Network for 3D Object Detection in a Point Cloud},
-booktitle = {The IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
-month = {June},
-year = {2020}
-}
-```
-
-## Getting Started
-
-### Prerequisites
 
 ```
 conda install pytorch torchvision
@@ -66,111 +47,26 @@ DATASET_ROOT_DIR: /mnt/17b83cc4-8721-4108-b173-4fa1677ba5df/dataset/kitti
         └── ...
 
 ### Download Point-GNN
-
-Clone the repository recursively:
-
-### Training
 ```
-bash train.sh
+git clone 
 ```
 
-
-
-
-<!--
-## Inference
-### Run a checkpoint
-Test on the validation split:
+### Prepare work dir
 ```
-python3 run.py checkpoints/car_auto_T3_train/ --dataset_root_dir DATASET_ROOT_DIR --output_dir DIR_TO_SAVE_RESULTS
-```
-Test on the test dataset:
-```
-python3 run.py checkpoints/car_auto_T3_trainval/ --test --dataset_root_dir DATASET_ROOT_DIR --output_dir DIR_TO_SAVE_RESULTS
+mkdir logs
+mkdir saved_models
+mkdir figs
 ```
 
+### Backbone Training
 ```
-usage: run.py [-h] [-l LEVEL] [--test] [--no-box-merge] [--no-box-score]
-              [--dataset_root_dir DATASET_ROOT_DIR]
-              [--dataset_split_file DATASET_SPLIT_FILE]
-              [--output_dir OUTPUT_DIR]
-              checkpoint_path
-
-Point-GNN inference on KITTI
-
-positional arguments:
-  checkpoint_path       Path to checkpoint
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -l LEVEL, --level LEVEL
-                        Visualization level, 0 to disable,1 to nonblocking
-                        visualization, 2 to block.Default=0
-  --test                Enable test model
-  --no-box-merge        Disable box merge.
-  --no-box-score        Disable box score.
-  --dataset_root_dir DATASET_ROOT_DIR
-                        Path to KITTI dataset. Default="../dataset/kitti/"
-  --dataset_split_file DATASET_SPLIT_FILE
-                        Path to KITTI dataset split
-                        file.Default="DATASET_ROOT_DIR/3DOP_splits/val.txt"
-  --output_dir OUTPUT_DIR
-                        Path to save the detection
-                        resultsDefault="CHECKPOINT_PATH/eval/"
-```
-### Performance
-Install kitti_native_evaluation offline evaluation:
-```
-cd kitti_native_evaluation
-cmake ./
-make
-```
-Evaluate output results on the validation split:
-```
-evaluate_object_offline DATASET_ROOT_DIR/labels/training/label_2/ DIR_TO_SAVE_RESULTS
+python3 trainrl.py configs/car_auto_T3_train_train_config configs/car_auto_T3_train_config \
+  --dataset_root_dir /mnt/17b83cc4-8721-4108-b173-4fa1677ba5df/dataset/kitti --k_val=-1 --vote_idx=-1 
 ```
 
-## Training
-We put training parameters in a train_config file. To start training, we need both the train_config and config.
+### RL Training
 ```
-usage: train.py [-h] [--dataset_root_dir DATASET_ROOT_DIR]
-                [--dataset_split_file DATASET_SPLIT_FILE]
-                train_config_path config_path
+python3 combining.py configs/car_auto_T3_train_train_config configs/car_auto_T3_train_config \
+  --dataset_root_dir /mnt/17b83cc4-8721-4108-b173-4fa1677ba5df/dataset/kitti --k_val=-1 --vote_idx=-1 
+```
 
-Training of PointGNN
-
-positional arguments:
-  train_config_path     Path to train_config
-  config_path           Path to config
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --dataset_root_dir DATASET_ROOT_DIR
-                        Path to KITTI dataset. Default="../dataset/kitti/"
-  --dataset_split_file DATASET_SPLIT_FILE
-                        Path to KITTI dataset split file.Default="DATASET_ROOT
-                        _DIR/3DOP_splits/train_config["train_dataset"]"
-```
-For example:
-```
-python3 train.py configs/car_auto_T3_train_train_config configs/car_auto_T3_train_config
-```
-We strongly recommand readers to view the train_config before starting the training. 
-Some common parameters which you might want to change first:
-```
-train_dir     The directory where checkpoints and logs are stored.
-train_dataset The dataset split file for training. 
-NUM_GPU       The number of GPUs to use. We used two GPUs for the reference model. 
-              If you want to use a single GPU, you might also need to reduce the batch size by half to save GPU memory.
-              Similarly, you might want to increase the batch size if you want to utilize more GPUs. 
-              Check the train.py for details.               
-```
-We also provide an evaluation script to evaluate the checkpoints periodically. For example:
-```
-python3 eval.py configs/car_auto_T3_train_eval_config 
-```
-You can use tensorboard to view the training and evaluation status. 
-```
-tensorboard --logdir=./train_dir
-```
--->
