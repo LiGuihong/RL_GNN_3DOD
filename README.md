@@ -1,5 +1,8 @@
 
+### Prepare the python environment
 ```
+conda create --name pointgnn python=3.8.12
+conda activate pointgnn
 conda install pytorch torchvision
 
 ```
