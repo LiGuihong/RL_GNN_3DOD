@@ -196,11 +196,11 @@ if __name__ == "__main__":
         last_epoch = 0
         os.system("mkdir saved_models/kp{}_vote{}".format(args.k_val, args.vote_idx))
     else:
-        ckpt_list = glob.glob("saved_models/kp{}_vote{}/model_*".format(-1, -1))
+        ckpt_list = glob.glob("saved_models/kp{}_vote{}/model_*".format(args.k_val, -1))
         epoch_idx = []
-        epoch_idx += [int(ckptname.replace("saved_models/kp{}_vote{}/model_".format(-1, -1), '').replace('.pt', '')) for ckptname in ckpt_list]
+        epoch_idx += [int(ckptname.replace("saved_models/kp{}_vote{}/model_".format(args.k_val, -1), '').replace('.pt', '')) for ckptname in ckpt_list]
         last_epoch = np.max(epoch_idx)
-        model.load_state_dict(torch.load("saved_models/kp{}_vote{}/model_{}.pt".format(-1, -1, last_epoch)))
+        model.load_state_dict(torch.load("saved_models/kp{}_vote{}/model_{}.pt".format(args.k_val, -1, last_epoch)))
         model.eval()
     rlagent = RLagnet(300)
     rlagent = rlagent.to(device) 
@@ -233,7 +233,11 @@ if __name__ == "__main__":
             input_v, vertex_coord_list, keypoint_indices_list, edges_list, \
                     cls_labels, encoded_boxes, valid_boxes = batch
             with torch.no_grad():
-                base_t_loss = 0
+                logits, box_encoding  = model(batch, is_training=False)
+                predictions = torch.argmax(logits, dim=1)
+                loss_dict = model.loss(logits, cls_labels, box_encoding, encoded_boxes, valid_boxes)
+                t_cls_loss, t_loc_loss, t_reg_loss = loss_dict['cls_loss'], loss_dict['loc_loss'], loss_dict['reg_loss']
+                base_t_loss =  t_cls_loss+t_loc_loss+ t_reg_loss
                 writer.add_scalar('train/base_t_loss', base_t_loss, steps)
                 
             oldpointfeat = model.call_previouselayer(batch, is_training=True)

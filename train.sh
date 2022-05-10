@@ -25,6 +25,6 @@ CUDA_VISIBLE_DEVICES=1 python3 test.py configs/car_auto_T3_train_train_config co
 
 CUDA_VISIBLE_DEVICES=0 python3 rlagent.py configs/car_auto_T3_train_train_config configs/car_auto_T3_train_config \
  --dataset_root_dir /mnt/4889cd91-2b08-4919-8d37-9ca1657e954e/datasets/kitti_mirror \
- --k_val=256 --vote_idx=-1 --resume=1 --test_epoch=2
+ --k_val=-1 --vote_idx=-1 --resume=1 --test_epoch=2
 
 
