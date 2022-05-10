@@ -4,7 +4,6 @@
 conda create --name pointgnn python=3.8.12
 conda activate pointgnn
 conda install pytorch torchvision
-
 ```
 Install torch-scatter according to your pytorch version following instructions in this url: https://github.com/rusty1s/pytorch_scatter
 
@@ -21,9 +20,6 @@ pip3 install --user shapely
 
 We use the KITTI 3D Object Detection dataset. Please download the dataset from the KITTI website and also download the 3DOP train/val split [here](https://xiaozhichen.github.io/files/mv3d/imagesets.tar.gz). We provide extra split files for seperated classes in [splits/](splits). We recommand the following file structure:
 
-```
-ssh to lambdax.ece.utexas.edu
-DATASET_ROOT_DIR: /mnt/17b83cc4-8721-4108-b173-4fa1677ba5df/dataset/kitti 
 ```
     DATASET_ROOT_DIR
     ├── image                    #  Left color images
@@ -48,10 +44,12 @@ DATASET_ROOT_DIR: /mnt/17b83cc4-8721-4108-b173-4fa1677ba5df/dataset/kitti
         ├── train.txt
         ├── train_car.txt
         └── ...
+```
+
 
 ### Download Point-GNN
 ```
-git clone 
+git clone https://github.com/LiGuihong/RL_GNN_3DOD.git
 ```
 
 ### Prepare work dir
