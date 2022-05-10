@@ -1,4 +1,11 @@
 
+We forked the code from the following GitHub repo:
+
+https://github.com/Shudeng/Point-GNN.pytorch
+
+
+We incorporate our RL algorithms on the above code base. 
+
 ### Prepare the python environment
 ```
 conda create --name pointgnn python=3.8.12
